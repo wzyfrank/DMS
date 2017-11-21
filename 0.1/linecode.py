@@ -11,6 +11,10 @@ import numpy as np
 
 ###############################################################################
 def get_linecode():
+    Z_dict = dict()
+    C_dict = dict()
+    Phase_dict = dict()
+    
     # unit: ohms per mile
     Z1 = np.array([
     [0.4576 + 1.0780j, 0.1560 + 0.5017j, 0.1535 + 0.3849j],
@@ -158,6 +162,48 @@ def get_linecode():
     
     Z = np.concatenate((Z1, Z2, Z3, Z4, Z5, Z6, Z7, Z8, Z9, Z10, Z11, Z12), axis = 0)
     C = np.concatenate((C1, C2, C3, C4, C5, C6, C7, C8, C9, C10, C11, C12), axis = 0)
+    
+    # Zbus dict
+    Z_dict[1] = Z1
+    Z_dict[2] = Z2
+    Z_dict[3] = Z3
+    Z_dict[4] = Z4
+    Z_dict[5] = Z5
+    Z_dict[6] = Z6
+    Z_dict[7] = Z7
+    Z_dict[8] = Z8
+    Z_dict[9] = Z9
+    Z_dict[10] = Z10
+    Z_dict[11] = Z11
+    Z_dict[12] = Z12
+    
+    #Cbus dict
+    C_dict[1] = C1
+    C_dict[2] = C2
+    C_dict[3] = C3
+    C_dict[4] = C4
+    C_dict[5] = C5
+    C_dict[6] = C6
+    C_dict[7] = C7
+    C_dict[8] = C8
+    C_dict[9] = C9
+    C_dict[10] = C10
+    C_dict[11] = C11
+    C_dict[12] = C12
 
-    return (Z, C)
+    # Phase dict
+    Phase_dict[1] = 3
+    Phase_dict[2] = 3
+    Phase_dict[3] = 3
+    Phase_dict[4] = 3
+    Phase_dict[5] = 3
+    Phase_dict[6] = 3
+    Phase_dict[7] = 2
+    Phase_dict[8] = 2
+    Phase_dict[9] = 1
+    Phase_dict[10] = 1
+    Phase_dict[11] = 1
+    Phase_dict[12] = 3
+    
+    return (Z, C, Z_dict, C_dict, Phase_dict)
  

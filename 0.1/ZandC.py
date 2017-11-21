@@ -19,7 +19,7 @@ import scipy.io as sio
 ###############################################################################
 def ZC_line(bus_dict, Vbase, threePbus, Zbus, Cbus):
     # call linecode module to get the line code
-    (Z_dict, C_dict) = linecode.get_linecode()
+    (Zarray, Carray, Z_dict, C_dict, Phase_dict) = linecode.get_linecode()
     
     # convert phase components to sequence components
     a = -0.5 + 1j * np.sqrt(3) / 2
@@ -44,78 +44,33 @@ def ZC_line(bus_dict, Vbase, threePbus, Zbus, Cbus):
         C = np.zeros((3, 3), dtype = complex)
         
         # get the line segment impenance and admittance
-        if config == 1:
-            Z = Z_dict[0:3, 0:3] * length
-            C = C_dict[0:3, 0:3] * length
-            # change to sequential components
-            Z = np.dot(np.dot(As_inv, Z), As)
-            C = np.dot(np.dot(As_inv, C), As) 
-        elif config == 2:
-            Z = Z_dict[3:6, 0:3] * length
-            C = C_dict[3:6, 0:3] * length
-            # change to sequential components
-            Z = np.dot(np.dot(As_inv, Z), As)
-            C = np.dot(np.dot(As_inv, C), As)                             
-        elif config == 3:
-            Z = Z_dict[6:9, 0:3] * length
-            C = C_dict[6:9, 0:3] * length  
-            # change to sequential components
-            Z = np.dot(np.dot(As_inv, Z), As)
-            C = np.dot(np.dot(As_inv, C), As)                             
-        elif config == 4:      
-            Z = Z_dict[9:12, 0:3] * length
-            C = C_dict[9:12, 0:3] * length 
-            # change to sequential components
-            Z = np.dot(np.dot(As_inv, Z), As)
-            C = np.dot(np.dot(As_inv, C), As)                             
-        elif config == 5:      
-            Z = Z_dict[12:15, 0:3] * length
-            C = C_dict[12:15, 0:3] * length
-            # change to sequential components
-            Z = np.dot(np.dot(As_inv, Z), As)
-            C = np.dot(np.dot(As_inv, C), As)                             
-        elif config == 6:
-            Z = Z_dict[15:18, 0:3] * length
-            C = C_dict[15:18, 0:3] * length 
-            # change to sequential components
-            Z = np.dot(np.dot(As_inv, Z), As)
-            C = np.dot(np.dot(As_inv, C), As)                             
-        elif config == 7:
-            Z = Z_dict[18:21, 0:3] * length
-            C = C_dict[18:21, 0:3] * length         
-        elif config == 8:      
-            Z = Z_dict[21:24, 0:3] * length
-            C = C_dict[21:24, 0:3] * length 
-        elif config == 9:      
-            Z = Z_dict[24:27, 0:3] * length
-            C = C_dict[24:27, 0:3] * length 
-        elif config == 10:
-            Z = Z_dict[27:30, 0:3] * length
-            C = C_dict[27:30, 0:3] * length         
-        elif config == 11:
-            Z = Z_dict[30:33, 0:3] * length
-            C = C_dict[30:33, 0:3] * length         
-        elif config == 12:      
-            Z = Z_dict[33:36, 0:3] * length
-            C = C_dict[33:36, 0:3] * length 
-            # change to sequential components
-            Z = np.dot(np.dot(As_inv, Z), As)
-            C = np.dot(np.dot(As_inv, C), As)                             
         
+        # config equal or greater than 100 indicates this is a transformer
+        if config >= 100:
+            continue
         
-        # add this line to Zbus and Cbus matrix
-        for f in range(3):
-            for t in range(3):
-                from_phase = str(from_bus) + '.' + str(f+1)
-                to_phase = str(to_bus) + '.' + str(t+1)
-                from_t = str(from_bus) + '.' + str(t+1)
-                to_f = str(to_bus) + '.' + str(f+1)
-                if from_phase in bus_dict and to_phase in bus_dict:
-                    # bus_dict is 1 based, python is 0 based 
-                    Zbus[bus_dict[from_phase]-1, bus_dict[to_phase]-1] += Z[f,t]
-                    Cbus[bus_dict[from_phase]-1, bus_dict[from_t]-1] += C[f,t] / 2
-                    if to_f in bus_dict:
-                        Cbus[bus_dict[to_f]-1, bus_dict[to_phase]-1] += C[f,t] / 2
+        # config smaller than 100, indicates this is a line segment
+        else:
+            Z = Z_dict[config] * length
+            C = C_dict[config] * length
+            # 3-phase line segment, change to sequential components
+            if Phase_dict[config] == 3:
+                Z = np.dot(np.dot(As_inv, Z), As)
+                C = np.dot(np.dot(As_inv, C), As) 
+                             
+            # add this line to Zbus and Cbus matrix
+            for f in range(3):
+                for t in range(3):
+                    from_phase = str(from_bus) + '.' + str(f+1)
+                    to_phase = str(to_bus) + '.' + str(t+1)
+                    from_t = str(from_bus) + '.' + str(t+1)
+                    to_f = str(to_bus) + '.' + str(f+1)
+                    if from_phase in bus_dict and to_phase in bus_dict:
+                        # bus_dict is 1 based, python is 0 based 
+                        Zbus[bus_dict[from_phase]-1, bus_dict[to_phase]-1] += Z[f,t]
+                        Cbus[bus_dict[from_phase]-1, bus_dict[from_t]-1] += C[f,t] / 2
+                        if to_f in bus_dict:
+                            Cbus[bus_dict[to_f]-1, bus_dict[to_phase]-1] += C[f,t] / 2
     
     return (Zbus, Cbus)
 
@@ -274,9 +229,6 @@ def gen_ZC(Vbase):
     # call bus_gen function
     # get the bus dict , N_bus and 3-phase bus
     (bus_dict, N_bus, threePbus) = bus.Bus_gen()
-    
-    # import the linecode data
-    (Z_dict, C_dict) = linecode.get_linecode()
     
     ## init the Zbus and Cbus matrix
     Zbus = np.zeros((N_bus, N_bus), dtype = complex)

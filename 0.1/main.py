@@ -8,17 +8,19 @@ import ZandC
 class OPF:
     ###########################################################################
     #FUNCTION: init, the constructor
-    
+    # Vbase base voltage level
+    # SourceBus the slack bus
     #INPUT: None
 
     #OUTPUT: None
     ###########################################################################
-    def __init__(self):
+    def __init__(self, Vbase, SourceBus, reg_bus, reg_phase):
         # The Voltage base
-        self.Vbase = 4160 # V
+        self.Vbase = Vbase # V
         
         # Voltage regulator nodes
-        self.reg_bus = ['150R', '9R', '25R', '160R']
+        self.reg_bus = reg_bus
+        self.reg_Phase = reg_phase 
         
         # (1) get the bus dict 
         (self.bus_dict, self.N_bus, self.threePbus) = Bus.Bus_gen()
@@ -28,7 +30,7 @@ class OPF:
     
         # (3) the bus -> phase dict
         self.bus_phase_dict = dict()
-        self.bus_phase_dict['150'] = [1,2,3]
+        self.bus_phase_dict[SourceBus] = [1,2,3]
         
         # (4) the bus -> downstream bus dictionary
         self.downstream_dict = dict()
@@ -58,8 +60,11 @@ class OPF:
         self.fd.write('\n')
         self.fd.write('% voltage regulator taps \n')
         ## voltage regulator parameters
-        for reg in self.reg_bus:
-            if reg == '150R' or reg == '160R':
+        for i in range(len(self.reg_bus)):
+            reg = self.reg_bus[i]
+            ph = self.reg_Phase[i]
+            # ABC
+            if ph == 'ABC':
                 self.fd.write('\n')
                 self.fd.write('% voltage regulator: ' + reg + '\n')
                 self.fd.write('tapA' + reg + ' = 1.0 + 0.00625 * 0;\n')
@@ -67,19 +72,51 @@ class OPF:
                 self.fd.write('tapC' + reg + ' = 1.0 + 0.00625 * 0;\n')
                 self.fd.write('alpha' + reg + ' = [tapA' + reg + '; tapB' + reg + '; tapC' + reg + '];\n')
                 self.fd.write('alphaM' + reg + ' = alpha' + reg + ' * alpha' + reg + "';\n")
-            elif reg == '25R':
+            # AB
+            elif ph == 'AB':
+                self.fd.write('\n')
+                self.fd.write('% voltage regulator: ' + reg + '\n')
+                self.fd.write('tapA' + reg + ' = 1.0 + 0.00625 * 0;\n')
+                self.fd.write('tapB' + reg + ' = 1.0 + 0.00625 * 0;\n')
+                self.fd.write('alpha' + reg + ' = [tapA' + reg + '; tapB' + reg + '];\n')
+                self.fd.write('alphaM' + reg + ' = alpha' + reg + ' * alpha' + reg + "';\n")
+            # AC
+            elif ph == 'BC':
+                self.fd.write('\n')
+                self.fd.write('% voltage regulator: ' + reg + '\n')
+                self.fd.write('tapB' + reg + ' = 1.0 + 0.00625 * 0;\n')
+                self.fd.write('tapC' + reg + ' = 1.0 + 0.00625 * 0;\n')
+                self.fd.write('alpha' + reg + ' = [tapB' + reg + '; tapC' + reg + '];\n')
+                self.fd.write('alphaM' + reg + ' = alpha' + reg + ' * alpha' + reg + "';\n")
+            # AC
+            elif ph == 'AC':
                 self.fd.write('\n')
                 self.fd.write('% voltage regulator: ' + reg + '\n')
                 self.fd.write('tapA' + reg + ' = 1.0 + 0.00625 * 0;\n')
                 self.fd.write('tapC' + reg + ' = 1.0 + 0.00625 * 0;\n')
                 self.fd.write('alpha' + reg + ' = [tapA' + reg + '; tapC' + reg + '];\n')
                 self.fd.write('alphaM' + reg + ' = alpha' + reg + ' * alpha' + reg + "';\n")            
-            elif reg == '9R':
+            # A
+            elif ph == 'A':
                 self.fd.write('\n')
                 self.fd.write('% voltage regulator: ' + reg + '\n')
                 self.fd.write('tapA' + reg + ' = 1.0 + 0.00625 * 0;\n')
                 self.fd.write('alpha' + reg + ' = tapA' + reg + ';\n')
-                self.fd.write('alphaM' + reg + ' = alpha' + reg + ' * alpha' + reg + "';\n")    
+                self.fd.write('alphaM' + reg + ' = alpha' + reg + ' * alpha' + reg + "';\n")  
+            # B
+            elif ph == 'B':
+                self.fd.write('\n')
+                self.fd.write('% voltage regulator: ' + reg + '\n')
+                self.fd.write('tapB' + reg + ' = 1.0 + 0.00625 * 0;\n')
+                self.fd.write('alpha' + reg + ' = tapB' + reg + ';\n')
+                self.fd.write('alphaM' + reg + ' = alpha' + reg + ' * alpha' + reg + "';\n")  
+            # C
+            elif ph == 'C':
+                self.fd.write('\n')
+                self.fd.write('% voltage regulator: ' + reg + '\n')
+                self.fd.write('tapC' + reg + ' = 1.0 + 0.00625 * 0;\n')
+                self.fd.write('alpha' + reg + ' = tapC' + reg + ';\n')
+                self.fd.write('alphaM' + reg + ' = alpha' + reg + ' * alpha' + reg + "';\n")  
         self.fd.write('\n')
     
 
@@ -137,21 +174,23 @@ class OPF:
     ###########################################################################
     #FUNCTION: basicParameters, basic parameters for the model
     # Voltage profile, sequential component parameters
-    #INPUT: None
-
+    
+    #INPUT: Vsub voltage at substation
+    #       Vlb : voltage lower bound
+    #       Vub : voltage upper bound
     #OUTPUT: None
     ########################################################################### 
-    def basicParameters(self):
+    def basicParameters(self, Vsub, Vlb, Vub):
         self.fd.write('\n')
         self.fd.write('\n')
         # slack bus voltage
         self.fd.write('% three phase voltage at slack bus\n')
         self.fd.write('Vbase = ' + str(self.Vbase) + ' / sqrt(3);\n')
-        self.fd.write("v0=1.02 * Vbase * [0,sqrt(3),0]';\n")
+        self.fd.write("v0=" + str(Vsub) + " * Vbase * [0,sqrt(3),0]';\n")
         # voltage lower and upper bounds
         self.fd.write('% voltage upper and lower bounds\n')
-        self.fd.write('V_lb = 0.90 * Vbase;\n')
-        self.fd.write('V_ub = 1.055 * Vbase;\n')
+        self.fd.write('V_lb = ' + str(Vlb) + ' * Vbase;\n')
+        self.fd.write('V_ub = ' + str(Vub) + ' * Vbase;\n')
         self.fd.write('v_lb = V_lb * V_lb;\n')
         self.fd.write('v_ub = V_ub * V_ub;\n')
         self.fd.write('\n')
@@ -537,7 +576,7 @@ class OPF:
         # output the voltage profile
         self.fd.write('\n')
         self.fd.write('disp(diag(A * S150R149 * AH) / 1000)')
-        self.fd.close()     
+           
     
     
     ###########################################################################
@@ -552,11 +591,15 @@ class OPF:
         
 
         
+        
 if __name__ == "__main__": 
-    opf = OPF()
+    # regulator bus
+    reg_bus = ['150R', '9R', '25R', '160R']
+    reg_phase = ['ABC', 'A', 'AC', 'ABC']
+    opf = OPF(4160, '150', reg_bus, reg_phase)
     opf.VoltageRegulatorTaps()
     opf.Zimpedances()
-    opf.basicParameters()
+    opf.basicParameters(1.00, 0.9, 1.1) # Voltage at substation
     opf.createVariables()
     opf.ObjectiveFunction()
     opf.Constraints()
@@ -564,4 +607,4 @@ if __name__ == "__main__":
     opf.changeToPerUnit()
     opf.MATLABoutput()
     opf.close()
-    
+    del opf

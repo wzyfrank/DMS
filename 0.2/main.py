@@ -2,6 +2,8 @@ import pandas as pd
 import queue
 import Bus
 import ZandC
+import DER
+
 
 # forget about the per unit system 
 # use real value
@@ -17,7 +19,7 @@ class OPF:
     def __init__(self, Vbase, SourceBus, reg_bus, reg_phase):
         # The Voltage base
         self.Vbase = Vbase # V
-        
+        self.SourceBus = SourceBus
         # Voltage regulator nodes
         self.reg_bus = reg_bus
         self.reg_Phase = reg_phase 
@@ -186,7 +188,8 @@ class OPF:
         # slack bus voltage
         self.fd.write('% three phase voltage at slack bus\n')
         self.fd.write('Vbase = ' + str(self.Vbase) + ' / sqrt(3);\n')
-        self.fd.write("v0=" + str(Vsub) + " * Vbase * [0,sqrt(3),0]';\n")
+        self.fd.write("v0 =" + str(Vsub) + " * Vbase * [1; cosd(-120) + 1j * sind(-120); cosd(120) + 1j * sind(120)];\n")
+        #self.fd.write("v0=" + str(Vsub) + " * Vbase * [0,sqrt(3),0]';\n")
         # voltage lower and upper bounds
         self.fd.write('% voltage upper and lower bounds\n')
         self.fd.write('V_lb = ' + str(Vlb) + ' * Vbase;\n')
@@ -194,12 +197,6 @@ class OPF:
         self.fd.write('v_lb = V_lb * V_lb;\n')
         self.fd.write('v_ub = V_ub * V_ub;\n')
         self.fd.write('\n')
-        # sequential component parameters (matrices)
-        self.fd.write('% sequential component parameters\n')
-        self.fd.write('a = -0.5 + 0.5 * i * sqrt(3);\n')
-        self.fd.write('A = 1/sqrt(3) * [1,1,1; 1, a*a, a; 1, a, a*a];\n')
-        self.fd.write('AH = 1/sqrt(3) * [1,1,1; 1, a, a*a; 1, a*a, a];\n')
-        self.fd.write('\n')  
         
 
     ###########################################################################
@@ -227,10 +224,6 @@ class OPF:
             ph = len(self.bus_phase_dict[to_bus])
             self.fd.write('variable v' + to_bus + '(' + str(ph) + ',' + str(ph) + ') hermitian\n')
             
-            # the three phase -> single or two phase bus
-            if from_bus in self.threePbus and to_bus not in self.threePbus and from_bus not in self.transistion_bus:
-                self.fd.write('variable v' + from_bus + '_abc(3,3) hermitian\n')
-                self.transistion_bus.add(from_bus)
         # slack bus variable        
         self.fd.write('variable v150(3,3) hermitian\n')    
         
@@ -271,11 +264,9 @@ class OPF:
             to_bus = str(self.line_data.iloc[l, 1])        
             Z_cur = 'Z' + from_bus + to_bus
             l_cur = 'l' + from_bus + to_bus
-            if to_bus not in self.threePbus:
-                self.fd.write('trace(real('+ Z_cur + '*' + l_cur + ')) + ')
-            else:
-                self.fd.write('trace(real(A * '+ Z_cur + '*' + l_cur + ' * AH)) + ')
-            #self.fd.write('trace(imag('+ Z_cur + '*' + l_cur + ')) + ')
+
+            self.fd.write('trace(real('+ Z_cur + '*' + l_cur + ')) + ')
+
         self.fd.write('0)\n')
         
         self.fd.write('subject to\n')  
@@ -299,12 +290,7 @@ class OPF:
         self.fd.write('% (1): voltage lower and upper bounds \n')
         for l in range(self.N_lines):
             to_bus = str(self.line_data.iloc[l, 1])
-            # three phase bus, use Seq. values
-            if to_bus in self.threePbus:
-                self.fd.write('v_lb <= diag(A * v' + to_bus + ' * ctranspose(A)) <= v_ub;\n')
-            # non-three phase bus, use abc values
-            else:
-                self.fd.write('v_lb <= diag(v' + to_bus + ') <= v_ub;\n')
+            self.fd.write('v_lb <= diag(v' + to_bus + ') <= v_ub;\n')
                 
         self.fd.write('v150 == v0 * ctranspose(v0);\n' )  
         
@@ -331,16 +317,10 @@ class OPF:
                 phase_from = self.bus_phase_dict[from_bus]
                 phase_to = self.bus_phase_dict[to_bus]
                 idx_list = [idx+1 for idx, val in enumerate(phase_from) if val in phase_to]
-                if to_bus in self.threePbus:
-                    # (2) voltage across a line, both side three phase bus
-                    self.fd.write('A * v' + to_bus + ' * AH == (A * (v' + from_bus + '(' + str(idx_list) + ',' + str(idx_list) + ') -'  + S_cur + '*ctranspose(' + Z_cur + ') - ' + Z_cur + '*ctranspose(' + S_cur + ') + ' + Z_cur + '*' + l_cur + '*ctranspose(' + Z_cur + ')) * AH) .* alphaM' + to_bus + ';\n') 
-                elif from_bus in self.threePbus:
-                    # (2) voltage across a line, from side three phase bus 
-                    self.fd.write('v' + to_bus + ' == (v' + from_bus + '_abc(' + str(idx_list) + ',' + str(idx_list) + ') - ' + S_cur + '*ctranspose(' + Z_cur + ') - ' + Z_cur + '*ctranspose(' + S_cur + ') + ' + Z_cur + '*' + l_cur + '*ctranspose(' + Z_cur + ')) .* alphaM' + to_bus + ';\n') 
-                else:
-                    # (2) voltage across a line, both side non-three phase bus
-                    self.fd.write('v' + to_bus + ' == (v' + from_bus + '(' + str(idx_list) + ',' + str(idx_list) + ') - ' + S_cur + '*ctranspose(' + Z_cur + ') - ' + Z_cur + '*ctranspose(' + S_cur + ') + ' + Z_cur + '*' + l_cur + '*ctranspose(' + Z_cur + ')) .* alphaM' + to_bus + ';\n') 
-                
+
+                # (2) voltage across a line
+                self.fd.write('v' + to_bus + ' == (v' + from_bus + '(' + str(idx_list) + ',' + str(idx_list) + ') - ' + S_cur + '*ctranspose(' + Z_cur + ') - ' + Z_cur + '*ctranspose(' + S_cur + ') + ' + Z_cur + '*' + l_cur + '*ctranspose(' + Z_cur + ')) .* alphaM' + to_bus + ';\n') 
+            
                 # (3) semidefinite constraint
                 self.fd.write('[v' + from_bus + '(' + str(idx_list) + ',' + str(idx_list) + '), ' + S_cur + '; ctranspose(' + S_cur + '), ' + l_cur + '] >= 0;\n')
                        
@@ -356,17 +336,11 @@ class OPF:
                 phase_from = self.bus_phase_dict[from_bus]
                 phase_to = self.bus_phase_dict[to_bus]
                 idx_list = [idx+1 for idx, val in enumerate(phase_from) if val in phase_to]
-                # from phase bus is a three phase bus
-                if from_bus in self.threePbus:
-                    # voltage across a line
-                    self.fd.write('v' + to_bus + ' == v' + from_bus + '_abc(' + str(idx_list) + ',' + str(idx_list) + ') - ' + S_cur + '*ctranspose(' + Z_cur + ') - ' + Z_cur + '*ctranspose(' + S_cur + ') + ' + Z_cur + '*' + l_cur + '*ctranspose(' + Z_cur + ');\n')
-                    # semidefinite constraint
-                    self.fd.write('[v' + from_bus + '_abc(' + str(idx_list) + ',' + str(idx_list) + '), ' + S_cur + '; ctranspose(' + S_cur + '), ' + l_cur + '] >= 0;\n')
-                else:
-                    # voltage across a line
-                    self.fd.write('v' + to_bus + ' == v' + from_bus + '(' + str(idx_list) + ',' + str(idx_list) + ') - ' + S_cur + '*ctranspose(' + Z_cur + ') - ' + Z_cur + '*ctranspose(' + S_cur + ') + ' + Z_cur + '*' + l_cur + '*ctranspose(' + Z_cur + ');\n')
-                    # semidefinite constraint
-                    self.fd.write('[v' + from_bus + '(' + str(idx_list) + ',' + str(idx_list) + '), ' + S_cur + '; ctranspose(' + S_cur + '), ' + l_cur + '] >= 0;\n')
+
+                # voltage across a line
+                self.fd.write('v' + to_bus + ' == v' + from_bus + '(' + str(idx_list) + ',' + str(idx_list) + ') - ' + S_cur + '*ctranspose(' + Z_cur + ') - ' + Z_cur + '*ctranspose(' + S_cur + ') + ' + Z_cur + '*' + l_cur + '*ctranspose(' + Z_cur + ');\n')
+                # semidefinite constraint
+                self.fd.write('[v' + from_bus + '(' + str(idx_list) + ',' + str(idx_list) + '), ' + S_cur + '; ctranspose(' + S_cur + '), ' + l_cur + '] >= 0;\n')
      
             # (4) power flow balance
             to_PhaseA = str(to_bus) + '.1'
@@ -383,31 +357,20 @@ class OPF:
                 load_idx.append(self.bus_dict[to_PhaseC])
             
             # upstream line
-            if from_bus in self.threePbus and to_bus in self.threePbus:
-                self.fd.write('diag(A *(' + S_cur + '-' + Z_cur + '*' + l_cur + ') * AH)') 
-            else:
-                self.fd.write('diag(' + S_cur + '-' + Z_cur + '*' + l_cur + ')') 
+            self.fd.write('diag(' + S_cur + '-' + Z_cur + '*' + l_cur + ')') 
             
             # load 
             self.fd.write('- loads(' + str(load_idx) + ')')
             
             # shunt capacitance
-            if to_bus in self.threePbus:
-                # add the capacitance data
-                self.fd.write(' + diag(A * v' + to_bus + ' * Cbus(' + str(load_idx) + ',' + str(load_idx) + ') * AH) == ')
-            else:
-                # add the capacitance data
-                self.fd.write(' + diag(v' + to_bus + ' * Cbus(' + str(load_idx) + ',' + str(load_idx) + ')) == ') 
+            self.fd.write(' + diag(v' + to_bus + ' * Cbus(' + str(load_idx) + ',' + str(load_idx) + ')) == ') 
                 
             # downstream flows
             if to_bus in self.downstream_dict:
                 for d_bus in self.downstream_dict[to_bus]:
                     # equal phase config
                     if len(self.bus_phase_dict[to_bus]) == len(self.bus_phase_dict[d_bus]):
-                        if to_bus in self.threePbus:
-                            self.fd.write('diag(A * S' + to_bus + d_bus + ' * AH) + ')  
-                        else:
-                            self.fd.write('diag(S' + to_bus + d_bus + ') + ')  
+                        self.fd.write('diag(S' + to_bus + d_bus + ') + ')  
                     else:
                         # to_bus ABC
                         if self.bus_phase_dict[to_bus] == [1,2,3]:
@@ -446,9 +409,6 @@ class OPF:
             self.fd.write('0;\n')
             self.fd.write('\n')
         
-        # (5) bridge between the transistion bus
-        for bus in self.transistion_bus:
-            self.fd.write('v' + bus + '_abc == A * v' + bus + ' * AH;\n')
             
         # close the cvx
         self.fd.write('\n')
@@ -466,9 +426,9 @@ class OPF:
     #OUTPUT: None
     ###########################################################################
     def recoverVI(self):
-        self.fd.write('V150 = A * v0;\n')
+        self.fd.write('V' + str(self.SourceBus) + '= v0;\n')
         bus_queue = queue.Queue()
-        bus_queue.put('150')
+        bus_queue.put(self.SourceBus)
         while not bus_queue.empty():
             cur_bus = bus_queue.get()
             if cur_bus in self.downstream_dict:
@@ -477,30 +437,13 @@ class OPF:
                     phase_cur = self.bus_phase_dict[cur_bus]
                     phase_d = self.bus_phase_dict[d_bus]
                     idx_list = [idx+1 for idx, val in enumerate(phase_cur) if val in phase_d]
-                    
-                    # both from and to buses are three phase buses
-                    if cur_bus in self.threePbus and d_bus in self.threePbus:
-                        self.fd.write('I' + cur_bus + d_bus + ' = 1/trace(A * v' + cur_bus + '(' + str(idx_list) + ',' + str(idx_list) + ') * AH) * ctranspose(A * S' + cur_bus + d_bus + ' * AH)*V' + cur_bus + '(' + str(idx_list) + ');\n')
-                        if d_bus not in self.reg_bus:
-                            self.fd.write('V' + d_bus + ' = V' + cur_bus + '(' + str(idx_list) + ') - A * Z' + cur_bus + d_bus + '* AH *I' + cur_bus + d_bus + ';\n')
-                        else:
-                            self.fd.write('V' + d_bus + ' = (V' + cur_bus + '(' + str(idx_list) + ') - A * Z' + cur_bus + d_bus + '* AH *I' + cur_bus + d_bus + ').* alpha' + d_bus + ';\n')
-                    
-                    # just the from bus is three phase bus
-                    elif cur_bus in self.threePbus:
-                        self.fd.write('I' + cur_bus + d_bus + ' = 1/trace(v' + cur_bus + '_abc(' + str(idx_list) + ',' + str(idx_list) + ') ) * ctranspose(S' + cur_bus + d_bus + ')*V' + cur_bus + '(' + str(idx_list) + ');\n')
-                        if d_bus not in self.reg_bus:
-                            self.fd.write('V' + d_bus + ' = V' + cur_bus + '(' + str(idx_list) + ') - Z' + cur_bus + d_bus + '*I' + cur_bus + d_bus + ';\n')
-                        else:
-                            self.fd.write('V' + d_bus + ' = (V' + cur_bus + '(' + str(idx_list) + ') - Z' + cur_bus + d_bus + '*I' + cur_bus + d_bus + ') .* alpha' + d_bus + ';\n')
-                    
-                    # both buses are non-three phase buses
-                    else: 
-                        self.fd.write('I' + cur_bus + d_bus + ' = 1/trace(v' + cur_bus + '(' + str(idx_list) + ',' + str(idx_list) + '))*ctranspose(S' + cur_bus + d_bus + ')*V' + cur_bus + '(' + str(idx_list) + ');\n')
-                        if d_bus not in self.reg_bus:
-                            self.fd.write('V' + d_bus + ' = V' + cur_bus + '(' + str(idx_list) + ') - Z' + cur_bus + d_bus + '*I' + cur_bus + d_bus + ';\n')
-                        else:
-                            self.fd.write('V' + d_bus + ' = (V' + cur_bus + '(' + str(idx_list) + ') - Z' + cur_bus + d_bus + '*I' + cur_bus + d_bus + ') .* alpha' + d_bus + ';\n')
+                                       
+
+                    self.fd.write('I' + cur_bus + d_bus + ' = 1/trace(v' + cur_bus + '(' + str(idx_list) + ',' + str(idx_list) + '))*ctranspose(S' + cur_bus + d_bus + ')*V' + cur_bus + '(' + str(idx_list) + ');\n')
+                    if d_bus not in self.reg_bus:
+                        self.fd.write('V' + d_bus + ' = V' + cur_bus + '(' + str(idx_list) + ') - Z' + cur_bus + d_bus + '*I' + cur_bus + d_bus + ';\n')
+                    else:
+                        self.fd.write('V' + d_bus + ' = (V' + cur_bus + '(' + str(idx_list) + ') - Z' + cur_bus + d_bus + '*I' + cur_bus + d_bus + ') .* alpha' + d_bus + ';\n')
                            
                     bus_queue.put(d_bus)        
                     
@@ -518,7 +461,7 @@ class OPF:
         self.fd.write('phasors=[];\n')
         
         bus_queue = queue.Queue()
-        bus_queue.put('150')
+        bus_queue.put(self.SourceBus)
         while not bus_queue.empty():
             cur_bus = bus_queue.get()
             print(cur_bus)
@@ -575,7 +518,7 @@ class OPF:
     
         # output the voltage profile
         self.fd.write('\n')
-        self.fd.write('disp(diag(A * S150R149 * AH) / 1000)')
+        self.fd.write('disp(diag(S150R149) / 1000)')
            
     
     
@@ -596,6 +539,9 @@ if __name__ == "__main__":
     # regulator bus
     reg_bus = ['150R', '9R', '25R', '160R']
     reg_phase = ['ABC', 'A', 'AC', 'ABC']
+    # DER
+    
+    
     opf = OPF(4160, '150', reg_bus, reg_phase)
     opf.VoltageRegulatorTaps()
     opf.Zimpedances()

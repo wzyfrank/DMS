@@ -20,12 +20,7 @@ import scipy.io as sio
 def ZC_line(bus_dict, Vbase, threePbus, Zbus, Cbus):
     # call linecode module to get the line code
     (Zarray, Carray, Z_dict, C_dict, Phase_dict) = linecode.get_linecode()
-    
-    # convert phase components to sequence components
-    a = -0.5 + 1j * np.sqrt(3) / 2
-    As = (1 / np.sqrt(3)) * np.array([[1, 1, 1],[1, a*a, a],[1, a, a*a]])
-    As_inv = (1 / np.sqrt(3)) * np.array([[1, 1, 1],[1, a, a*a],[1, a*a, a]])  
-    
+        
     ## load the line data
     load_data = pd.read_csv("data/line data.csv", header=None)
     N_lines= len(load_data.index)
@@ -53,10 +48,6 @@ def ZC_line(bus_dict, Vbase, threePbus, Zbus, Cbus):
         else:
             Z = Z_dict[config] * length
             C = C_dict[config] * length
-            # 3-phase line segment, change to sequential components
-            if Phase_dict[config] == 3:
-                Z = np.dot(np.dot(As_inv, Z), As)
-                C = np.dot(np.dot(As_inv, C), As) 
                              
             # add this line to Zbus and Cbus matrix
             for f in range(3):
@@ -88,10 +79,6 @@ def ZC_line(bus_dict, Vbase, threePbus, Zbus, Cbus):
 #        Cbus (added transformer data)
 ###############################################################################
 def ZC_transformer(bus_dict, Vbase, threePbus, Zbus, Cbus):    
-    # convert phase components to sequence components
-    a = -0.5 + 1j * np.sqrt(3) / 2
-    As = (1 / np.sqrt(3)) * np.array([[1, 1, 1],[1, a*a, a],[1, a, a*a]])
-    As_inv = (1 / np.sqrt(3)) * np.array([[1, 1, 1],[1, a, a*a],[1, a*a, a]])  
     ## load the transformer data
     load_data = pd.read_csv("data/line data.csv", header=None)
     N_lines= len(load_data.index)
@@ -114,27 +101,19 @@ def ZC_transformer(bus_dict, Vbase, threePbus, Zbus, Cbus):
             Sbase = 150000
             Zbase = Vbase * Vbase / Sbase
             Z = Zbase * np.diagflat([0.0127 + 0.0272j, 0.0127 + 0.0272j, 0.0127 + 0.0272j]) 
-            # change to sequential components
-            Z = np.dot(np.dot(As_inv, Z), As)
-            C = np.dot(np.dot(As_inv, C), As) 
+
         elif config == 1003:
             # voltage regulator, S base is 5000kVA
             # single phase
             Sbase = 5000000
             Zbase = Vbase * Vbase / Sbase
             Z = Zbase * np.diagflat([0.000001+0.0001j, 0.000001+0.0001j, 0.000001+0.0001j])
-            # change to sequential components
-            Z = np.dot(np.dot(As_inv, Z), As)
-            C = np.dot(np.dot(As_inv, C), As) 
         elif config == 1004:
             # voltage regulator, S base is 2000kVA
             # single phase
             Sbase = 2000000
             Zbase = Vbase * Vbase / Sbase
             Z = Zbase * np.diagflat([0.000001+0.0001j, 0.000001+0.0001j, 0.000001+0.0001j])   
-            # change to sequential components
-            Z = np.dot(np.dot(As_inv, Z), As)
-            C = np.dot(np.dot(As_inv, C), As) 
         elif config == 1005:
             # voltage regulator, S base is 2000kVA
             # single phase
@@ -177,12 +156,7 @@ def ZC_transformer(bus_dict, Vbase, threePbus, Zbus, Cbus):
 #OUTPUT: Zbus (added line data)
 #        Cbus (added line data)
 ###############################################################################
-def ZC_capacitor(bus_dict, Vbase, threePbus, Zbus, Cbus):
-    # convert to sequence components
-    a = -0.5 + 1j * np.sqrt(3) / 2
-    As = (1 / np.sqrt(3)) * np.array([[1, 1, 1],[1, a*a, a],[1, a, a*a]])
-    As_inv = (1 / np.sqrt(3)) * np.array([[1, 1, 1],[1, a, a*a],[1, a*a, a]])  
-    
+def ZC_capacitor(bus_dict, Vbase, threePbus, Zbus, Cbus):    
     ## Cbus matrix, primarily for capacitors
     cap_data = pd.read_csv("data/cap data.csv", sep = ',', header=None)
     N_caps= len(cap_data.index)
@@ -194,8 +168,6 @@ def ZC_capacitor(bus_dict, Vbase, threePbus, Zbus, Cbus):
             for ph in range(3):
                 cap_C[ph, ph] = 1j * (cap_data.iloc[i,ph+1] * 1000) / (Vbase * Vbase / 3)
         
-            # change to sequential components
-            cap_C = np.dot(np.dot(As_inv, cap_C), As) 
             for ph in range(3):
                 cap_phase = str(cap_bus) + '.' + str(ph+1)
                 if cap_phase in bus_dict:

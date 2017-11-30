@@ -174,7 +174,7 @@ class OPF:
     
 
     ###########################################################################
-    #FUNCTION: basicParameters, basic parameters for the model
+    # FUNCTION: basicParameters, basic parameters for the model
     # Voltage profile, sequential component parameters
     
     #INPUT: Vsub voltage at substation
@@ -200,13 +200,13 @@ class OPF:
         
 
     ###########################################################################
-    #FUNCTION: createVariables, create CVX variables (V, I, S)
+    #FUNCTION: createVariables, create CVX variables (V, I, S), DER variables
     
     #INPUT: None
 
     #OUTPUT: None
     ###########################################################################        
-    def createVariables(self):
+    def createVariables(self, der_list):
         self.fd.write('\n')
         self.fd.write('\n')
         self.fd.write('cvx_begin sdp quiet\n')
@@ -245,7 +245,13 @@ class OPF:
             ph = len(self.bus_phase_dict[to_bus])
             self.fd.write('variable l' + str(from_bus) + str(to_bus) + '(' + str(ph) + ',' + str(ph) + ') hermitian\n')
              
-
+        # (4) DER variables
+        self.fd.write('\n')
+        self.fd.write('% DER variables\n')
+        for der in der_list:
+            self.fd.write('variable DER' + der.bus + '(3, 1) complex\n')
+            
+        
     ###########################################################################
     #FUNCTION: ObjectiveFunction, create the objective function
     
@@ -253,10 +259,11 @@ class OPF:
 
     #OUTPUT: None
     ###########################################################################    
-    def ObjectiveFunction(self):
+    def ObjectiveFunction(self, der_list):
         self.fd.write('\n')   
         self.fd.write('\n')   
-    
+        
+        '''
         # minimize losses
         self.fd.write('minimize(')
         for l in range(self.N_lines):
@@ -268,7 +275,15 @@ class OPF:
             self.fd.write('trace(real('+ Z_cur + '*' + l_cur + ')) + ')
 
         self.fd.write('0)\n')
+        '''
         
+        # minimize production cost
+        self.fd.write('minimize(')
+        self.fd.write('trace(real(S150R149)) +')
+        for der in der_list:
+            self.fd.write('trace(real(DER' + der.bus + ')) + ')
+            
+        self.fd.write('0)\n')
         self.fd.write('subject to\n')  
     
 
@@ -278,11 +293,12 @@ class OPF:
     # (2) voltage across a line 
     # (3) semidefinite contraints
     # (4) power flow balance
-    #INPUT: None
+    # (5) DER power constriants
+    #INPUT: list of DERs
 
     #OUTPUT: None
     ###########################################################################    
-    def Constraints(self):
+    def Constraints(self, der_list):
         # (1) voltage upper and lower bounds
         self.fd.write('\n')
         self.fd.write('\n')
@@ -297,7 +313,6 @@ class OPF:
         # (2) voltage across a line 
         # (3) semidefinite contraints
         # (4) power flow balance
-        # (5) bridge between the transistion bus
         self.fd.write('\n')
         self.fd.write('% (1): voltage across a line \n')
         for l in range(self.N_lines):
@@ -409,6 +424,18 @@ class OPF:
             self.fd.write('0;\n')
             self.fd.write('\n')
         
+        # (5) DER power constriants
+        self.fd.write('\n')
+        self.fd.write('% (5): DER power constriants \n')
+        for der in der_list:
+            self.fd.write('0 <= real(DER' + der.bus + '(1)) <= ' + str(der.PmaxA) + ';\n')
+            self.fd.write('0 <= real(DER' + der.bus + '(2)) <= ' + str(der.PmaxB) + ';\n')
+            self.fd.write('0 <= real(DER' + der.bus + '(3)) <= ' + str(der.PmaxC) + ';\n')
+            self.fd.write('imag(DER' + der.bus + '(1)) == real(DER' + der.bus + '(1)) * ' + str(der.QP_ratio) + ';\n')
+            self.fd.write('imag(DER' + der.bus + '(2)) == real(DER' + der.bus + '(2)) * ' + str(der.QP_ratio) + ';\n')
+            self.fd.write('imag(DER' + der.bus + '(3)) == real(DER' + der.bus + '(3)) * ' + str(der.QP_ratio) + ';\n')       
+            self.fd.write('\n')
+            
             
         # close the cvx
         self.fd.write('\n')
@@ -539,16 +566,17 @@ if __name__ == "__main__":
     # regulator bus
     reg_bus = ['150R', '9R', '25R', '160R']
     reg_phase = ['ABC', 'A', 'AC', 'ABC']
-    # DER
     
+    # DER
+    der_list = DER.readDER()
     
     opf = OPF(4160, '150', reg_bus, reg_phase)
     opf.VoltageRegulatorTaps()
     opf.Zimpedances()
     opf.basicParameters(1.00, 0.9, 1.1) # Voltage at substation
-    opf.createVariables()
-    opf.ObjectiveFunction()
-    opf.Constraints()
+    opf.createVariables(der_list)
+    opf.ObjectiveFunction(der_list)
+    opf.Constraints(der_list)
     opf.recoverVI()
     opf.changeToPerUnit()
     opf.MATLABoutput()

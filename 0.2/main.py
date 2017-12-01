@@ -281,7 +281,7 @@ class OPF:
         self.fd.write('minimize(')
         self.fd.write('trace(real(S150R149)) +')
         for der in der_list:
-            self.fd.write('trace(real(DER' + der.bus + ')) + ')
+            self.fd.write(str(der.cost) + ' * sum(real(DER' + der.bus + ')) + ')
             
         self.fd.write('0)\n')
         self.fd.write('subject to\n')  
@@ -299,6 +299,12 @@ class OPF:
     #OUTPUT: None
     ###########################################################################    
     def Constraints(self, der_list):
+        # build a dict of DER BUS -> DER
+        der_dict = dict()
+        for der in der_list:
+            der_dict[der.bus] = der
+        
+        
         # (1) voltage upper and lower bounds
         self.fd.write('\n')
         self.fd.write('\n')
@@ -371,16 +377,33 @@ class OPF:
             if to_PhaseC in self.bus_dict:
                 load_idx.append(self.bus_dict[to_PhaseC])
             
-            # upstream line
+            # a. upstream line
             self.fd.write('diag(' + S_cur + '-' + Z_cur + '*' + l_cur + ')') 
             
-            # load 
+            # b. load 
             self.fd.write('- loads(' + str(load_idx) + ')')
             
-            # shunt capacitance
+            # c. DER, check if this bus has DER
+            if to_bus in der_dict.keys():
+                # get current der
+                der = der_dict[to_bus]
+                
+                # check phasing 
+                der_phase_idx = []
+                if to_PhaseA in der.phase_list:
+                    der_phase_idx.append(1)
+                if to_PhaseB in der.phase_list:
+                    der_phase_idx.append(2)
+                if to_PhaseC in der.phase_list:
+                    der_phase_idx.append(3)
+                
+                # write DER
+                self.fd.write('+ DER' + der.bus + '('+ str(der_phase_idx) + ')')
+                
+            # d. shunt capacitance
             self.fd.write(' + diag(v' + to_bus + ' * Cbus(' + str(load_idx) + ',' + str(load_idx) + ')) == ') 
                 
-            # downstream flows
+            # e. downstream flows
             if to_bus in self.downstream_dict:
                 for d_bus in self.downstream_dict[to_bus]:
                     # equal phase config
@@ -425,12 +448,13 @@ class OPF:
             self.fd.write('\n')
         
         # (5) DER power constriants
+        # convert rating from kW to W
         self.fd.write('\n')
         self.fd.write('% (5): DER power constriants \n')
         for der in der_list:
-            self.fd.write('0 <= real(DER' + der.bus + '(1)) <= ' + str(der.PmaxA) + ';\n')
-            self.fd.write('0 <= real(DER' + der.bus + '(2)) <= ' + str(der.PmaxB) + ';\n')
-            self.fd.write('0 <= real(DER' + der.bus + '(3)) <= ' + str(der.PmaxC) + ';\n')
+            self.fd.write('0 <= real(DER' + der.bus + '(1)) <= ' + str(der.PmaxA * 1000) + ';\n')
+            self.fd.write('0 <= real(DER' + der.bus + '(2)) <= ' + str(der.PmaxB * 1000) + ';\n')
+            self.fd.write('0 <= real(DER' + der.bus + '(3)) <= ' + str(der.PmaxC * 1000) + ';\n')
             self.fd.write('imag(DER' + der.bus + '(1)) == real(DER' + der.bus + '(1)) * ' + str(der.QP_ratio) + ';\n')
             self.fd.write('imag(DER' + der.bus + '(2)) == real(DER' + der.bus + '(2)) * ' + str(der.QP_ratio) + ';\n')
             self.fd.write('imag(DER' + der.bus + '(3)) == real(DER' + der.bus + '(3)) * ' + str(der.QP_ratio) + ';\n')       

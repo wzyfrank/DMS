@@ -1,5 +1,5 @@
 import pandas as pd
-
+import numpy as np
 
 def readDER():
     DER_list = [] # a list of DER objects
@@ -39,8 +39,20 @@ class DER:
         self.PmaxB = SB * pf
         self.PmaxC = SC * pf
         self.pf = pf
+        self.QP_ratio = np.sqrt(1 - pf * pf) / pf
 
-
+        # phase list 
+        self.phase_list = []
+        if 'A' in phase:
+            self.phase_list.append(bus + '.1')
+        if 'B' in phase:
+            self.phase_list.append(bus + '.2')
+        if 'C' in phase:
+            self.phase_list.append(bus + '.3')
+        
+        
 if __name__ == "__main__": 
     DER_list = readDER()
-    
+    for der in DER_list:
+        print(der.phase)
+        print(der.phase_list)

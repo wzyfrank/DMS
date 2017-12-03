@@ -45,7 +45,7 @@ class OPF:
     
     
         # open the file
-        self.fd = open('ieee123.m', 'w')
+        self.fd = open('ieee123_yalmip.m', 'w')
         # first line, MATLAB function declare
         self.fd.write('clear;\n')
         self.fd.write('clc;\n')
@@ -67,6 +67,7 @@ class OPF:
         self.fd.write("Cbus = Cbus.Cbus;\n")
         self.fd.write("loads = load('PQloads.mat');\n")
         self.fd.write("loads = loads.PQloads;\n")
+        self.fd.write("loads = transpose(loads);\n")
         self.fd.write("Yloads = load('Yloads.mat');\n")
         self.fd.write("Yloads = Yloads.Yloads;\n")        
         self.fd.write('\n')
@@ -229,9 +230,7 @@ class OPF:
     def createVariables(self, der_list):
         self.fd.write('\n')
         self.fd.write('\n')
-        self.fd.write('cvx_begin sdp quiet\n')
-        self.fd.write('% the solver: \n')
-        self.fd.write('cvx_solver SeDuMi;\n')
+        
         
         # (1) voltage square variables
         self.fd.write('\n')
@@ -242,10 +241,10 @@ class OPF:
             from_bus = str(self.line_data.iloc[l, 0])
             to_bus = str(self.line_data.iloc[l, 1])
             ph = len(self.bus_phase_dict[to_bus])
-            self.fd.write('variable v' + to_bus + '(' + str(ph) + ',' + str(ph) + ') hermitian\n')
+            self.fd.write('v' + to_bus + ' = sdpvar(' + str(ph) + ',' + str(ph) + ", 'hermitian', 'complex');\n")
             
         # slack bus variable        
-        self.fd.write('variable v150(3,3) hermitian\n')    
+        self.fd.write("v150 = sdpvar(3,3,'hermitian', 'complex');\n")    
         
         # (2) complex power variables
         self.fd.write('\n')
@@ -254,7 +253,7 @@ class OPF:
             from_bus = str(self.line_data.iloc[l, 0])
             to_bus = str(self.line_data.iloc[l, 1])
             ph = len(self.bus_phase_dict[to_bus])
-            self.fd.write('variable S' + str(from_bus) + str(to_bus) + '(' + str(ph) + ',' + str(ph) + ') complex\n')
+            self.fd.write('S' + str(from_bus) + str(to_bus) + ' = sdpvar(' + str(ph) + ',' + str(ph) + ", 'full', 'complex');\n")
         
         # (3) current square variables
         self.fd.write('\n')
@@ -263,13 +262,13 @@ class OPF:
             from_bus = str(self.line_data.iloc[l, 0])
             to_bus = str(self.line_data.iloc[l, 1])
             ph = len(self.bus_phase_dict[to_bus])
-            self.fd.write('variable l' + str(from_bus) + str(to_bus) + '(' + str(ph) + ',' + str(ph) + ') hermitian\n')
+            self.fd.write('l' + str(from_bus) + str(to_bus) + ' = sdpvar(' + str(ph) + ',' + str(ph) + ", 'hermitian', 'complex');\n")
              
         # (4) DER variables
         self.fd.write('\n')
         self.fd.write('% DER variables\n')
         for der in der_list:
-            self.fd.write('variable DER' + der.bus + '(3, 1) complex\n')
+            self.fd.write('DER' + der.bus + " = sdpvar(3, 1, 'full', 'complex');\n")
             
         
     ###########################################################################
@@ -298,13 +297,13 @@ class OPF:
         '''
         
         # minimize production cost
-        self.fd.write('minimize(')
+        self.fd.write('Objective = (')
         self.fd.write('trace(real(S150R149)) +')
         for der in der_list:
             self.fd.write(str(der.cost) + ' * sum(real(DER' + der.bus + ')) + ')
             
         self.fd.write('0)\n')
-        self.fd.write('subject to\n')  
+        
     
 
     ###########################################################################
@@ -328,13 +327,14 @@ class OPF:
         # (1) voltage upper and lower bounds
         self.fd.write('\n')
         self.fd.write('\n')
+        self.fd.write('Cons = [];\n')
         self.fd.write('% constraints: \n')
         self.fd.write('% (1): voltage lower and upper bounds \n')
         for l in range(self.N_lines):
             to_bus = str(self.line_data.iloc[l, 1])
-            self.fd.write('v_lb <= diag(v' + to_bus + ') <= v_ub;\n')
+            self.fd.write('Cons = [Cons, v_lb <= diag(v' + to_bus + ') <= v_ub];\n')
                 
-        self.fd.write('v150 == v0 * ctranspose(v0);\n' )  
+        self.fd.write('Cons = [Cons, v150 == v0 * ctranspose(v0)];\n' )  
         
         # (2) voltage across a line 
         # (3) semidefinite contraints
@@ -360,17 +360,17 @@ class OPF:
                 idx_list = [idx+1 for idx, val in enumerate(phase_from) if val in phase_to]
 
                 # (2) voltage across a line
-                self.fd.write('v' + to_bus + ' == (v' + from_bus + '(' + str(idx_list) + ',' + str(idx_list) + ') - ' + S_cur + '*ctranspose(' + Z_cur + ') - ' + Z_cur + '*ctranspose(' + S_cur + ') + ' + Z_cur + '*' + l_cur + '*ctranspose(' + Z_cur + ')) .* alphaM' + to_bus + ';\n') 
+                self.fd.write('Cons = [Cons, v' + to_bus + ' == (v' + from_bus + '(' + str(idx_list) + ',' + str(idx_list) + ') - ' + S_cur + '*ctranspose(' + Z_cur + ') - ' + Z_cur + '*ctranspose(' + S_cur + ') + ' + Z_cur + '*' + l_cur + '*ctranspose(' + Z_cur + ')) .* alphaM' + to_bus + '];\n') 
             
                 # (3) semidefinite constraint
-                self.fd.write('[v' + from_bus + '(' + str(idx_list) + ',' + str(idx_list) + '), ' + S_cur + '; ctranspose(' + S_cur + '), ' + l_cur + '] >= 0;\n')
+                self.fd.write('Cons = [Cons, [v' + from_bus + '(' + str(idx_list) + ',' + str(idx_list) + '), ' + S_cur + '; ctranspose(' + S_cur + '), ' + l_cur + '] >= 0];\n')
                        
             # from bus phase = to bus phase
             elif len(self.bus_phase_dict[from_bus]) == len(self.bus_phase_dict[to_bus]):
                 # voltage across a line
-                self.fd.write('v' + to_bus + ' == v' + from_bus + ' - ' + S_cur + '*ctranspose(' + Z_cur + ') - ' + Z_cur + '*ctranspose(' + S_cur + ') + ' + Z_cur + '*' + l_cur + '*ctranspose(' + Z_cur + ');\n')
+                self.fd.write('Cons = [Cons, v' + to_bus + ' == v' + from_bus + ' - ' + S_cur + '*ctranspose(' + Z_cur + ') - ' + Z_cur + '*ctranspose(' + S_cur + ') + ' + Z_cur + '*' + l_cur + '*ctranspose(' + Z_cur + ')];\n')
                 # semidefinite constraint
-                self.fd.write('[v' + from_bus + ', ' + S_cur + '; ctranspose(' + S_cur + '), ' + l_cur + '] >= 0;\n')        
+                self.fd.write('Cons = [Cons, [v' + from_bus + ', ' + S_cur + '; ctranspose(' + S_cur + '), ' + l_cur + '] >= 0];\n')        
             
             # from bus phase != to bus phase
             else:
@@ -379,9 +379,9 @@ class OPF:
                 idx_list = [idx+1 for idx, val in enumerate(phase_from) if val in phase_to]
 
                 # voltage across a line
-                self.fd.write('v' + to_bus + ' == v' + from_bus + '(' + str(idx_list) + ',' + str(idx_list) + ') - ' + S_cur + '*ctranspose(' + Z_cur + ') - ' + Z_cur + '*ctranspose(' + S_cur + ') + ' + Z_cur + '*' + l_cur + '*ctranspose(' + Z_cur + ');\n')
+                self.fd.write('Cons = [Cons, v' + to_bus + ' == v' + from_bus + '(' + str(idx_list) + ',' + str(idx_list) + ') - ' + S_cur + '*ctranspose(' + Z_cur + ') - ' + Z_cur + '*ctranspose(' + S_cur + ') + ' + Z_cur + '*' + l_cur + '*ctranspose(' + Z_cur + ')];\n')
                 # semidefinite constraint
-                self.fd.write('[v' + from_bus + '(' + str(idx_list) + ',' + str(idx_list) + '), ' + S_cur + '; ctranspose(' + S_cur + '), ' + l_cur + '] >= 0;\n')
+                self.fd.write('Cons = [Cons, [v' + from_bus + '(' + str(idx_list) + ',' + str(idx_list) + '), ' + S_cur + '; ctranspose(' + S_cur + '), ' + l_cur + '] >= 0];\n')
      
             # (4) power flow balance
             to_PhaseA = str(to_bus) + '.1'
@@ -398,7 +398,7 @@ class OPF:
                 load_idx.append(self.bus_dict[to_PhaseC])
             
             # a. upstream line
-            self.fd.write('diag(' + S_cur + '-' + Z_cur + '*' + l_cur + ')') 
+            self.fd.write('Cons = [Cons, diag(' + S_cur + '-' + Z_cur + '*' + l_cur + ')') 
             
             # b. load 
             # constant PQ load
@@ -467,7 +467,7 @@ class OPF:
                                 self.fd.write('[0; diag(S' + to_bus + d_bus + ')] + ')
                                 
             # the last zero may seem redundant
-            self.fd.write('0;\n')
+            self.fd.write('0];\n')
             self.fd.write('\n')
         
         # (5) DER power constriants
@@ -487,11 +487,57 @@ class OPF:
         # close the cvx
         self.fd.write('\n')
         self.fd.write('\n')
-        self.fd.write('cvx_end\n')
+        self.fd.write("options = sdpsettings('verbose',1,'solver','mosek');\n")
+        self.fd.write("sol = optimize(Cons,Objective,options);\n")
         self.fd.write('\n')
         self.fd.write('\n')        
         
 
+    ###########################################################################
+    #FUNCTION: recoverVariables
+    
+    #INPUT: None
+
+    #OUTPUT: None
+    ###########################################################################        
+    def recoverVariables(self, der_list):
+        self.fd.write('\n')
+        self.fd.write('\n')
+        
+        
+        # (1) voltage square variables
+        self.fd.write('\n')
+        self.fd.write('% voltage square variables\n')
+        
+
+        for l in range(self.N_lines):
+            from_bus = str(self.line_data.iloc[l, 0])
+            to_bus = str(self.line_data.iloc[l, 1])
+            self.fd.write('v' + to_bus + ' = value(v' + to_bus + ');\n')
+            
+        # slack bus variable        
+        self.fd.write("v150 = value(v150);\n")    
+        
+        # (2) complex power variables
+        self.fd.write('\n')
+        self.fd.write('% complex power variables\n')
+        for l in range(self.N_lines):
+            from_bus = str(self.line_data.iloc[l, 0])
+            to_bus = str(self.line_data.iloc[l, 1])
+            self.fd.write('S' + str(from_bus) + str(to_bus) + ' = value(S' + str(from_bus) + str(to_bus) + ');\n')
+        
+        # (3) current square variables
+        self.fd.write('\n')
+        self.fd.write('% current square variables\n')   
+        for l in range(self.N_lines):
+            from_bus = str(self.line_data.iloc[l, 0])
+            to_bus = str(self.line_data.iloc[l, 1])
+            self.fd.write('l' + str(from_bus) + str(to_bus) + ' = value(l' + str(from_bus) + str(to_bus) + ');\n')
+             
+        self.fd.write('\n')
+        self.fd.write('\n')    
+            
+            
     ###########################################################################
     #FUNCTION: recoverVI, recover voltage and current phasors from SDP variables
     
@@ -625,6 +671,7 @@ if __name__ == "__main__":
     opf.createVariables(der_list)
     opf.ObjectiveFunction(der_list)
     opf.Constraints(der_list)
+    opf.recoverVariables(der_list)
     opf.recoverVI()
     opf.changeToPerUnit()
     opf.MATLABoutput()

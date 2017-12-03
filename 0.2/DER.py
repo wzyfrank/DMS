@@ -56,3 +56,4 @@ if __name__ == "__main__":
     for der in DER_list:
         print(der.phase)
         print(der.phase_list)
+        

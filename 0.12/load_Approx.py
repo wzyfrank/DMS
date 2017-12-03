@@ -110,7 +110,7 @@ def loadApproximate():
                     Yloads[bus_dict[node_C]-1, bus_dict[node_C]-1] = Y_C 
             
             # constant I
-            elif load_type == 'Y-I':
+            elif load_type == 'D-I':
                 # split half to PQ and other half to Z
                 if node_A in bus_dict:
                     PQloads[bus_dict[node_A]-1] = delta_load[0] / 2
@@ -119,9 +119,9 @@ def loadApproximate():
                 if node_C in bus_dict:
                     PQloads[bus_dict[node_C]-1] = delta_load[2] / 2
                     
-                Y_A = delta_load[0] / (Vbase * Vbase)
-                Y_B = delta_load[1] / (Vbase * Vbase)
-                Y_C = delta_load[2] / (Vbase * Vbase)
+                Y_A = delta_load[0] / (Vbase * Vbase * 2)
+                Y_B = delta_load[1] / (Vbase * Vbase * 2)
+                Y_C = delta_load[2] / (Vbase * Vbase * 2)
                 if node_A in bus_dict:
                     Yloads[bus_dict[node_A]-1, bus_dict[node_A]-1] = Y_A
                 if node_B in bus_dict:
@@ -131,3 +131,7 @@ def loadApproximate():
                     
     sio.savemat('data/Yloads.mat', {"Yloads":Yloads})  
     sio.savemat('data/PQloads.mat', {"PQloads":PQloads})
+
+
+if __name__ == "__main__": 
+    loadApproximate()

@@ -80,7 +80,8 @@ def v_DER_sensivity(der_list, f):
    
     # get bus_dict
     busnames = Bus.getBus()
-    
+    (bus_dict, N_bus, threePbus) = Bus.Bus_gen()
+    print(bus_dict)
     # impedance between bus and DER
     for bus in busnames:
         # check if any DER is downstream of the bus
@@ -93,20 +94,62 @@ def v_DER_sensivity(der_list, f):
         if hasDER:
             for der in der_list:
                 if bus in upstream_dict[der]:
-                    f.write('Z' + bus + der + ' = ')
+                    f.write('Ze' + bus + der + ' = ')
                     length = len(upstream_dict[der])
                     for i in range(length-1):
                         bus_f = upstream_dict[der][i]
                         bus_t = upstream_dict[der][i+1]
-                        f.write('Z' + bus_f + bus_t + ' + ')
+                        f.write('Ze' + bus_f + bus_t + ' + ')
+                    
+                    # last line segment, connected to DER
+                    bus_f = upstream_dict[der][-1]
+                    
+                    f.write('Ze' + bus_f + der + ' + ')
                     f.write('0;\n')
+            
+            # equations for delta-V 
+            f.write('Dv' + bus + ' = ' )
+            for der in der_list:
+                if bus in upstream_dict[der]:
+                    f.write('DER' + der + ' * Ze' + bus + der + "' + Ze" + bus + der + ' * DER' + der + "' + ")
+            f.write('0;\n')
+            
+            # delta V
+            nodeA = bus + '.1'
+            nodeB = bus + '.2'
+            nodeC = bus + '.3'
+            if nodeA in bus_dict.keys():
+                f.write('DeltaV(' + str(bus_dict[nodeA]) + ') = ')
+                for der in der_list:
+                    if bus in upstream_dict[der]:
+                        f.write('DER' + der + '(1) * Ze' + bus + der + "(1, 1)' + Ze" + bus + der + '(1, 1) * DER' + der + "(1)' + ")
+                f.write('0;\n')                
+            
+            if nodeB in bus_dict.keys():
+                f.write('DeltaV(' + str(bus_dict[nodeB]) + ') = ')
+                for der in der_list:
+                    if bus in upstream_dict[der]:
+                        f.write('DER' + der + '(2) * Ze' + bus + der + "(2, 2)' + Ze" + bus + der + '(2, 2) * DER' + der + "(2)' + ")
+                f.write('0;\n')
+                    
+            if nodeC in bus_dict.keys():
+                f.write('DeltaV(' + str(bus_dict[nodeC]) + ') = ')
+                for der in der_list:
+                    if bus in upstream_dict[der]:
+                        f.write('DER' + der + '(3) * Ze' + bus + der + "(3, 3)' + Ze" + bus + der + '(3, 3) * DER' + der + "(3)' + ")
+                f.write('0;\n')
+
+            f.write('\n')
     
+    # finally the voltage constraint
+    f.write('v_lb <= vPF + DeltaV <= v_ub;\n')
+            
     
 if __name__ == "__main__": 
     SourceBus = '150'
     (downstream_dict, upstream_dict) = bus_trace(SourceBus)
     
     f = open('v_DER.m', 'w')
-    der_list = ['83']
+    der_list = ['83', '88', '90', '92']
     v_DER_sensivity(der_list, f)
     f.close()

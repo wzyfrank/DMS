@@ -37,4 +37,14 @@ def Bus_gen():
     return (bus_dict, idx-1, threePbus)
 
 
-
+def getBus():
+    data = pd.read_csv("data/ieee123_EXP_Y.csv", header=None)    
+    # parse the data
+    N_rows = len(data.index)
+    
+    # set of bus names
+    busnames = set()
+    for i in range(N_rows):
+        busnames.add(data.iloc[i,0][:-2])
+    
+    return (busnames)    

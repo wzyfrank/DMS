@@ -614,26 +614,15 @@ class OPF:
     #OUTPUT: None
     ########################################################################### 
     def MATLABoutput(self):
-        self.fd.write('\n')
-        self.fd.write('\n')
-        self.fd.write('Voltage_output=[];\n')
+        self.fd.write('vPF=zeros(' + str(self.N_bus) + ', 1);\n')
         
-        load_nodes = pd.read_csv("data/loads data.csv", sep = ',', header=None)
-        N_load= len(load_nodes.index)
-        for i in range(N_load):
-            node = str(load_nodes.iloc[i,0])
-            phase_list = self.bus_phase_dict[node]
-            sum = 0
-            for a in phase_list:
-                sum = sum * 10 + a
-            self.fd.write('Voltage_output = [Voltage_output; recover_voltage(V' + node + ', ' + str(sum) + ')];\n')
-        
-        # change to per unit
-        self.fd.write('\n')
-        self.fd.write('% change to per unit\n')
-        self.fd.write('Voltage_output(:, 1) = Voltage_output(:, 1) / Vbase;\n')
-        self.fd.write('Voltage_output(:, 3) = Voltage_output(:, 3) / Vbase;\n')
-        self.fd.write('Voltage_output(:, 5) = Voltage_output(:, 5) / Vbase;\n')
+        busnames = Bus.getBus()
+        for bus in busnames:
+            ph_list = self.bus_phase_dict[bus]
+            for i in range(len(ph_list)):
+                node = bus + '.' + str(ph_list[i])
+                self.fd.write('vPF(' + str(self.bus_dict[node]) + ') = v' + bus + '(' + str(i+1) + ',' + str(i+1) + ');\n')
+                
         self.fd.write('\n')
     
         # output the voltage profile
@@ -676,4 +665,5 @@ if __name__ == "__main__":
     opf.changeToPerUnit()
     opf.MATLABoutput()
     opf.close()
+    print(opf.bus_phase_dict)
     del opf

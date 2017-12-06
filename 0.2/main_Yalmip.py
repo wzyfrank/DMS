@@ -193,6 +193,8 @@ class OPF:
                           
             # write the Z impedance to file
             self.fd.write('Z' + str(from_bus) + str(to_bus) + ' = Zbus(' + str(from_idx) + ',' + str(to_idx) + ');\n')
+            # write the Ze impedances (three phase expansion), by calling MATLAB functions
+            self.fd.write('Ze' + str(from_bus) + str(to_bus) + ' = convertZ(Z' + str(from_bus) + str(to_bus) +', ' + str(phase) + ');\n')
     
 
     ###########################################################################
@@ -269,7 +271,8 @@ class OPF:
         self.fd.write('% DER variables\n')
         for der in der_list:
             self.fd.write('DER' + der.bus + " = sdpvar(3, 1, 'full', 'complex');\n")
-            
+        
+        self.fd.write("DeltaV = sdpvar(" + str(self.N_bus) + ", 1, 'full', 'complex');\n")
         
     ###########################################################################
     #FUNCTION: ObjectiveFunction, create the objective function
@@ -650,7 +653,7 @@ if __name__ == "__main__":
     reg_phase = ['ABC', 'A', 'AC', 'ABC']
     
     # DER
-    der_list = []
+    der_list = DER.readDER()
     
     opf = OPF(4160, '150', reg_bus, reg_phase)
     opf.loadData()
@@ -665,5 +668,5 @@ if __name__ == "__main__":
     opf.changeToPerUnit()
     opf.MATLABoutput()
     opf.close()
-    print(opf.bus_phase_dict)
+   
     del opf

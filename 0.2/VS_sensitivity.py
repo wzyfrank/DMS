@@ -107,42 +107,35 @@ def v_DER_sensivity(der_list, f):
                     f.write('Ze' + bus_f + der + ' + ')
                     f.write('0;\n')
             
-            # equations for delta-V 
-            f.write('Dv' + bus + ' = ' )
-            for der in der_list:
-                if bus in upstream_dict[der]:
-                    f.write('DER' + der + ' * Ze' + bus + der + "' + Ze" + bus + der + ' * DER' + der + "' + ")
-            f.write('0;\n')
-            
             # delta V
             nodeA = bus + '.1'
             nodeB = bus + '.2'
             nodeC = bus + '.3'
             if nodeA in bus_dict.keys():
-                f.write('DeltaV(' + str(bus_dict[nodeA]) + ') = ')
+                f.write('Cons = [Cons, DeltaV(' + str(bus_dict[nodeA]) + ') == ')
                 for der in der_list:
                     if bus in upstream_dict[der]:
                         f.write('DER' + der + '(1) * Ze' + bus + der + "(1, 1)' + Ze" + bus + der + '(1, 1) * DER' + der + "(1)' + ")
-                f.write('0;\n')                
+                f.write('0];\n')                
             
             if nodeB in bus_dict.keys():
-                f.write('DeltaV(' + str(bus_dict[nodeB]) + ') = ')
+                f.write('Cons = [Cons, DeltaV(' + str(bus_dict[nodeB]) + ') == ')
                 for der in der_list:
                     if bus in upstream_dict[der]:
                         f.write('DER' + der + '(2) * Ze' + bus + der + "(2, 2)' + Ze" + bus + der + '(2, 2) * DER' + der + "(2)' + ")
-                f.write('0;\n')
+                f.write('0];\n')
                     
             if nodeC in bus_dict.keys():
-                f.write('DeltaV(' + str(bus_dict[nodeC]) + ') = ')
+                f.write('Cons = [Cons, DeltaV(' + str(bus_dict[nodeC]) + ') ==')
                 for der in der_list:
                     if bus in upstream_dict[der]:
                         f.write('DER' + der + '(3) * Ze' + bus + der + "(3, 3)' + Ze" + bus + der + '(3, 3) * DER' + der + "(3)' + ")
-                f.write('0;\n')
+                f.write('0];\n')
 
             f.write('\n')
     
     # finally the voltage constraint
-    f.write('v_lb <= vPF + DeltaV <= v_ub;\n')
+    f.write('Cons = [Cons, v_lb <= vPF + DeltaV <= v_ub];\n')
             
     
 if __name__ == "__main__": 

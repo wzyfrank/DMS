@@ -193,7 +193,7 @@ class OPF:
             # write the Z impedance to file
             self.fd.write('Z' + str(from_bus) + str(to_bus) + ' = Zbus(' + str(from_idx) + ',' + str(to_idx) + ');\n')
             # write the Ze impedances (three phase expansion), by calling MATLAB functions
-            self.fd.write('Ze' + str(from_bus) + str(to_bus) + ' = convertZ(Z, ' + str(from_bus) + str(to_bus) +', ' + str(phase) + ');\n')
+            self.fd.write('Ze' + str(from_bus) + str(to_bus) + ' = convertZ(Z' + str(from_bus) + str(to_bus) +', ' + str(phase) + ');\n')
 
     ###########################################################################
     # FUNCTION: basicParameters, basic parameters for the model
